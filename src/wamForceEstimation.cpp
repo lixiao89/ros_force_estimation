@@ -17,7 +17,9 @@
 
 #include "mtsHybridForcePosition.h"
 #include "mtsPIDAntiWindup.h"
-//#include "RLSestimator.h"
+
+#include <cisst_ros_bridge/mtsROSBridge.h>
+
 //================== MAIN =========================
 
 int main(int argc, char** argv){
@@ -42,8 +44,7 @@ int main(int argc, char** argv){
   vctFixedSizeVector<double,3> tw0(0.0);
   vctFrame4x4<double> Rtw0( Rw0, tw0 );
  
-  
-
+ 
   //-------------- Setting up Hybrid Control ------------------------
   
     mtsKeyboard kb;
@@ -156,6 +157,18 @@ int main(int argc, char** argv){
 
     mtsPIDAntiWindup* mtspid = new mtsPIDAntiWindup( "PID", 1.0/900.0, wam, osapid, gc );
     taskManager->AddComponent( mtspid );
+
+
+//---------------- For RLS ----------------------------
+ 
+ mtsROSBridge rlsROSBridge("rlsROSBridge", 20*cmn_ms, true);
+    
+ rlsROSBridge.AddPublisherFromReadCommand<vctDoubleVec, cisst_msgs::vctDoubleVec>("Controller", "GetRLSestimates", "/rls/esti");
+
+    taskManager->AddComponent(&rlsROSBridge);
+
+    taskManager->Connect(rlsROSBridge.GetName(), "Controller", 
+                         ctrl->GetName(),"Controller");
 
 // ------------------- Connecting ---------------------------
 

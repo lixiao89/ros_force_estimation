@@ -86,9 +86,11 @@ private:
   int avgNum;// number of joint position measurement to take in calculation of velocity
 
   // Estimated quantities from RLSestimator, xesti = [mu, Fc], Festi is the estimated tangential force
-  vctFixedSizeVector<double,2> xesti;
+  //vctFixedSizeVector<double,2> xesti;
+  vctDoubleVec xesti;
   double Festi;
 
+  mtsInterfaceProvided* rlsProvided; // used to connect to mtsROSBridge;
  //--------------------------------------------
   osaGravityCompensation* gc;
   osaHybridForcePosition* hfp;

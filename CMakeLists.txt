@@ -57,6 +57,9 @@ set (REQUIRED_CISST_LIBRARIES
  # find cisst and make sure required libraries have been compiled
  find_package (cisst REQUIRED ${REQUIRED_CISST_LIBRARIES})
  
+ include_directories(
+  ${catkin_INCLUDE_DIRS}
+)
  if( cisst_FOUND)
 
  include (${CISST_USE_FILE})
@@ -92,13 +95,13 @@ include_directories(
     sawKeyboard )
 
 add_executable( 
-      wam_force_estimation 
-      src/example.cpp 
+      wamForceEstimation 
+      src/wamForceEstimation.cpp 
       src/osaHybridForcePosition.cpp
       src/mtsHybridForcePosition.cpp )
 
-  target_link_libraries( wam_force_estimation ${REQUIRED_SAW_COMPONENTS} )
-  cisst_target_link_libraries( wam_force_estimation ${REQUIRED_CISST_LIBRARIES})
+  target_link_libraries( wamForceEstimation ${REQUIRED_SAW_COMPONENTS} ${catkin_LIBRARIES})
+  cisst_target_link_libraries( wamForceEstimation ${REQUIRED_CISST_LIBRARIES})
   
 endif( cisst_FOUND )
 ## Generate messages in the 'msg' folder
@@ -151,9 +154,7 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 # include_directories(include)
-include_directories(
-  ${catkin_INCLUDE_DIRS}
-)
+
 
 ## Declare a cpp library
 # add_library(force_estimation

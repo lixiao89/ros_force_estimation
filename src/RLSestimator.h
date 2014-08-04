@@ -44,9 +44,10 @@ class RLSestimator{
                Hk[1][1] = 0;
          }
 
-        void GetEstimates(vctFixedSizeVector<double,2>& xesti, double& Festi){
+        void GetEstimates(vctDoubleVec& xesti, double& Festi){
 
-            xesti = x;
+            xesti[0] = x[0];
+            xesti[1] = x[1];
             Festi = Fest; 
         }        
 

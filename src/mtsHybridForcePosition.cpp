@@ -98,9 +98,15 @@ mtsHybridForcePosition::mtsHybridForcePosition
 
         prevJointPos = qinit;
         
-        xesti = xinit;
+        xesti[0] = xinit[0];
+        xesti[1] = xinit[1];
         Festi = 0;
-             
+    //used to connect to mtsROS         
+    rlsProvided = this->AddInterfaceProvided("Controller");
+    if(rlsProvided){
+        this->StateTable.AddData(xesti,"xesti");
+        rlsProvided->AddCommandReadState(this->StateTable, xesti, "GetRLSestimates");
+    }
 //-------------------------------------------------------
     robot.Attach( &tool );
     
@@ -124,8 +130,8 @@ mtsHybridForcePosition::mtsHybridForcePosition
         slave->AddFunction( "SetPositionCMD", SetPosition );
     }
 
-
-      }
+    
+ }
  
     void mtsHybridForcePosition::Configure( const std::string& ){}
     void mtsHybridForcePosition::Startup(){

@@ -86,11 +86,12 @@ private:
   int avgNum;// number of joint position measurement to take in calculation of velocity
 
   // Estimated quantities from RLSestimator, xesti = [mu, Fc], Festi is the estimated tangential force
-  //vctFixedSizeVector<double,2> xesti;
-  vctDoubleVec xesti;
+  vctFixedSizeVector<double,2> xesti;
   double Festi;
+  vctDoubleVec rlsEstData;
 
   mtsInterfaceProvided* rlsProvided; // used to connect to mtsROSBridge;
+  double haveFailed; // for cisst_msgs::rlsEstData
  //--------------------------------------------
   osaGravityCompensation* gc;
   osaHybridForcePosition* hfp;
@@ -172,7 +173,6 @@ private:
       avg = temp/vect.size();
   }
 
-
 void CalcAverageVelocity(vctDynamicVector<double>& currJointPos, double& currTime, vctDynamicVector<double>& avgVel){
 
     std::vector<double> temp;
@@ -208,7 +208,7 @@ bool WAMIsNotMoving( vctDynamicVector<double>& currJointPos, double& currTime){
     CalcAverageVelocity(currJointPos, currTime, jointAvgVel);
       
 
-            double motionThreshold = 0.03;
+            double motionThreshold = 0.028;
 
         if(jointAvgVel[0] < motionThreshold && jointAvgVel[1] < motionThreshold && jointAvgVel[2] < motionThreshold && jointAvgVel[3] < motionThreshold && jointAvgVel[4] < motionThreshold && jointAvgVel[5] < motionThreshold && jointAvgVel[6] < motionThreshold){
 

@@ -163,17 +163,24 @@ int main(int argc, char** argv){
  
  mtsROSBridge rlsROSBridge("rlsROSBridge", 20*cmn_ms, true);
     
- rlsROSBridge.AddPublisherFromReadCommand<vctDoubleVec, cisst_msgs::vctDoubleVec>("Controller", "GetRLSestimates", "/rls/esti");
+ //rlsROSBridge.AddPublisherFromReadCommand<vctDoubleVec, cisst_msgs::vctDoubleVec>("Controller", "GetRLSestimates", "/rls/esti");
+
+ rlsROSBridge.AddPublisherFromReadCommand<vctDoubleVec, cisst_msgs::rlsEstData>("Controller", "GetRLSestimates", "/rls/esti");
+
 
     taskManager->AddComponent(&rlsROSBridge);
 
-    taskManager->Connect(rlsROSBridge.GetName(), "Controller", 
-                         ctrl->GetName(),"Controller");
+
+    if(!taskManager->Connect(rlsROSBridge.GetName(), "Controller", 
+                         ctrl->GetName(),"Controller")){
+        std::cout<< "Failed to connect:"
+            << kb.GetName() << "::Controller to"
+            << ctrl->GetName() << "::Controller"<<std::endl;
+        return -1;
+    }
 
 // ------------------- Connecting ---------------------------
 
- 
-//----------- connecting keyboard to hybrid controller------------
  if( !taskManager->Connect( ctrl->GetName(), "Control",
                             kb.GetName(), "Control") ){
     std::cout << "Failed to connect: "

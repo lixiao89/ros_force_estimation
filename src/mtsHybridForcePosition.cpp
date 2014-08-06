@@ -78,7 +78,8 @@ mtsHybridForcePosition::mtsHybridForcePosition
     failstate(false),
     isMoving(false),
     prevTime(osaGetTime()),
-    avgNum(10),
+    avgNum(4),
+    haveFailed(0),
 
     fz( 0.0 ),
     sg( nmrSavitzkyGolay( 1, 0, 100, 0 ) ){
@@ -88,6 +89,7 @@ mtsHybridForcePosition::mtsHybridForcePosition
         // initial value of the estimated coeff. of friction and Fc
         vctFixedSizeVector<double,2> xinit(0.5,1);
         rls = new RLSestimator(xinit);
+
         ofsForceData.open("/home/lixiao/Desktop/Data1.txt");
         startTime = osaGetTime();
         
@@ -98,14 +100,15 @@ mtsHybridForcePosition::mtsHybridForcePosition
 
         prevJointPos = qinit;
         
-        xesti[0] = xinit[0];
-        xesti[1] = xinit[1];
+        xesti = xinit;
+        rlsEstData.SetSize(6);
+        rlsEstData.Assign((double)0,0,0,0,0,0);
         Festi = 0;
     //used to connect to mtsROS         
     rlsProvided = this->AddInterfaceProvided("Controller");
     if(rlsProvided){
-        this->StateTable.AddData(xesti,"xesti");
-        rlsProvided->AddCommandReadState(this->StateTable, xesti, "GetRLSestimates");
+        this->StateTable.AddData(rlsEstData,"rlsEstData");
+        rlsProvided->AddCommandReadState(this->StateTable, rlsEstData, "GetRLSestimates");
     }
 //-------------------------------------------------------
     robot.Attach( &tool );
@@ -196,52 +199,41 @@ mtsHybridForcePosition::mtsHybridForcePosition
             ft = convolve( stdft, sg );
 // ------------------------ For RLS ----------------------------------------
 
-        //if(WAMIsNotMoving( Rtwt, prevPos, posDiffFrobenNorm)){    
-        double currTime = timer - startTime;
-        bool wamNotMoving = WAMIsNotMoving(q, currTime);
-        
-       // if(wamNotMoving && !isMoving){
-          if(wamNotMoving){
-            //std::cout<<"WAM is not moving!"<<std::endl;
-            //isMoving = true;
-            //rls->GetEstimates(xesti, Festi);
 
-            xesti.Assign((double)0,0);
-            Festi = 0;
-  
-            ofsForceData<< timer - startTime << ", "<<ft[0]<<", "<<ft[2]<<", "<< xesti[0] << ", "<< xesti[1] <<", " << Festi <<std::endl;
-            
-           }
-        //else if(!wamNotMoving && isMoving){
-          else{
-            //std::cout<<"WAM is moving!"<<std::endl;
-            //isMoving = false;
-            if(rls->Evaluate(ft[2], ft[0]) && !failstate){
-               std::cout<<"Cutting Failure at time:"<<timer - startTime<<std::endl;
-               failstate = true;
-            }
+        double currtime = timer - startTime;
 
-            rls->GetEstimates(xesti, Festi);
-            ofsForceData<< timer - startTime << ", "<<ft[0]<<", "<<ft[2]<<", "<< xesti[0] << ", "<< xesti[1] <<", " << Festi <<std::endl;
+        bool wamNotMoving = WAMIsNotMoving(q, currtime);
+    
+     /** parameters: 
+        *
+        * Fn: normal force as measured by the force sensor (currently force in the z direction)
+        * Fe: tangential force as measured by the force sensor (currently force in the x direction)
+        * currtime: current time = osaGetTime() - startTime
+        * currJointPos: current joint positions for all 7 joints
+        * rlsEstData: is a vector containing [Fe, Fn, mu, Fc, Fest, haveFailed] that gets pushed to ROS (gets changed by the method)
+        * failstate: used to indicate cutting failure (true if failed)  (gets changed by the method)
+        * haveFailed: a double value used to draw a spike on rqt if failure happens (set to a large number)  (gets changed by the method)
+        * wamNotMoving: is true when wam is not moving
+        * motionDetection: a switch to toggle between with and without motion detection feature
+        */
+   rls->RLSestimate(ft[2], 
+                ft[0], 
+                currtime,
+                q, 
+                rlsEstData,
+                failstate,
+                haveFailed,
+                wamNotMoving,
+                "ON");
+
+    rls->GetEstimates(xesti, Festi);
+
+      ofsForceData<< timer - startTime << ", "<<ft[0]<<", "<<ft[2]<<", "<< xesti[0] << ", "<< xesti[1] <<", " << Festi <<std::endl;
              
-        }
-
-           /* if(rls->Evaluate(ft[2], ft[0]) && !failstate){
-               std::cout<<"Cutting Failure at time:"<<timer - startTime<<std::endl;
-               failstate = true;
-            }
-
-                   
-            vctFixedSizeVector<double,2> xesti;
-            double Festi;
-
-            rls->GetEstimates(xesti, Festi);
-            ofsForceData<< timer - startTime << ", "<<ft[0]<<", "<<ft[2]<<", "<< xesti[0] << ", "<< xesti[1] <<", " << Festi <<std::endl;*/ 
-             
-
+}
 
 //----------------------------------------------------------------------------
-    }
+    
 
    
 void mtsHybridForcePosition::MoveTraj(){

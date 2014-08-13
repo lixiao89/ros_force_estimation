@@ -21,7 +21,7 @@
 #include <cisst_ros_bridge/mtsROSBridge.h>
 
 //================== MAIN =========================
-
+//
 int main(int argc, char** argv){
 
     cmnLogger::SetMask( CMN_LOG_ALLOW_ALL );

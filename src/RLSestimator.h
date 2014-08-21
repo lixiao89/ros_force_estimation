@@ -2,6 +2,7 @@
 #define _RLS_ESTIMATOR_H
 
 #include<iostream>
+#include<cmath>
 
 class RLSestimator{
 
@@ -12,43 +13,116 @@ class RLSestimator{
         vctFixedSizeVector<double,2> xlast; // used for motionDetection feature
         // P is the covariance of x        
         vctFixedSizeMatrix<double,2,2> P;
+        vctFixedSizeMatrix<double,2,2> Plast;
+
         // Fest is the estimated total tangential force 
         double Fest;
         double FestLast; // used for motionDetection feature
 
         // indicate a cutting failure mode
         bool fail;
+        // indicate contate state
+        bool contactState;
+        // true if wam is not moving;
+        bool wamMotionState;
+        
+        // SC: sliding and cutting
+        // SWC: sliding without cutting
+        // CWS: cutting without sliding
+        enum scenerio {IDLE, SC, SWC, CWS};
+        scenerio sc;
+
         // error threshold
-        double threshold;
+        double cuttingFailureThreshold; // defines when cutting failure happends
+        double contactThreshold;//
 
         //system matrix yk = Hk.transpose*x + v
-        vctFixedSizeMatrix<double,2,2> Hk;
+        vctFixedSizeMatrix<double,2,1> Hk;
         // measurement error covariance
-        vctFixedSizeMatrix<double,2,2> Rk;
-        
-        // yk is the measurement vector with first element measured tangential force and second element 0
-        vctFixedSizeVector<double,2> yk;
+       // vctFixedSizeMatrix<double,2,2> Rk;
+        double Rk;
+
+        // yk is the measurement tangential force 
+        double yk;
         // constructor
         RLSestimator(vctFixedSizeVector<double,2>& xinit): 
         
          x(xinit),
          xlast(xinit),
          P(vct2x2::Eye()),
-         Rk(vct2x2::Eye()),
+         Plast(vct2x2::Eye()),   
+         Rk(0.5),
          fail(false),
-         threshold(5),
-         Hk(vct2x2::Eye()),
+         contactState(true),
+         wamMotionState(true), 
+         sc(SWC),  
+         cuttingFailureThreshold(5),
+         contactThreshold(-2),
          Fest(0),
          FestLast(0),
-         yk(0,0){
-                
-               Hk[0][0] = 0;
-               Hk[0][1] = 0;
-               Hk[1][0] = 1;
-               Hk[1][1] = 0;
+         yk(0){
+                Hk[0][0] = 1;
+                Hk[1][0] = 1;
          }
 
-        void GetEstimates(vctFixedSizeVector<double,2>& xesti, double& Festi){
+        ~RLSestimator(){};
+        
+        //returns true if the cutter is in contact with the cutting surface
+        bool inContact(const double& Fn){
+            if(Fn < contactThreshold && contactState == true){
+                std::cout<< "Cutter in Contact" << std::endl;
+                contactState = false;
+            }
+            if(Fn > contactThreshold && contactState == false){
+                std::cout<< "Cutter not in Contact!" << std::endl;
+                contactState = true;
+            }
+
+            if(Fn < contactThreshold){
+                return true;
+            }
+            if(Fn > contactThreshold){
+                return false;
+            }
+        }
+
+        // detects if WAM is in motion
+        bool WAMnotMoving(const bool& wamNotMoving){
+            if(wamNotMoving && wamMotionState == true){
+                std::cout<< "WAM STOPPED!" << std::endl;
+                wamMotionState = false;
+                return true;
+            }
+            if(!wamNotMoving && wamMotionState == false){
+                std::cout<< "WAM moving" << std::endl;
+               wamMotionState = true;
+                return false;
+            }
+        } 
+
+        bool isSlidingWithoutCutting(const double& Fc, const bool& wamNotMoving, const double& currtime){
+            /*if(wamNotMoving && wamMotionState == true){
+                std::cout<< "WAM STOPPED!" << std::endl;
+                wamMotionState = false;
+                return false;
+            }
+            else{*/
+                if(Fc > 1 && sc == SC){
+                    std::cout<< "Cutting and sliding at Time" << currtime <<std::endl;
+                    sc = SWC;
+                    wamMotionState = true;
+                    return false;
+                }
+                if( Fc <= 1 && sc == SWC){
+                    std::cout<< "sliding without cutting at Time" << currtime << std::endl;
+                    sc = SC;
+                    wamMotionState = true;
+                    return true;
+                }
+            //}    
+        }      
+
+        void GetEstimates (vctFixedSizeVector<double,2>& xesti, double& Festi) const{
 
             xesti[0] = x[0];
             xesti[1] = x[1];
@@ -56,42 +130,132 @@ class RLSestimator{
         }        
         
         // returns true if detects a cutting failure
-       bool Evaluate( const double &Fn, const double &Fe ){
+        // parameters:
+        //
+        // Fn: measured normal force
+        // Fe: measured tangential force
+        // P: covariance matrix from last step 
+        // xnew: newly estimated [mu, Fc]
+        // Fnew: newly estimated tangential force
+        // Cov: updated covariance matrix
+        // isCuting: true if sliding and cutting, false if sliding but not cutting
+       void Evaluate( const double &Fn, 
+                      const double &Fe, 
+                      const vctFixedSizeMatrix<double,2,2>& p, 
+                      vctFixedSizeVector<double,2>& xnew, 
+                      double& Fnew, 
+                      vctFixedSizeMatrix<double,2,2>& Cov, 
+                      bool isCutting){
 
-                x = xlast;
-                Fest = FestLast;
+               // xnew = xlast;
+               // Fnew = Flast;
+                
+                // in the case of sliding without cutting
+               /* if(!isCutting){
+                    Hk[1][0] = 0;
+                    xnew[1] = 0;
+                }*/
 
                 Hk[0][0] = Fn;
-                yk[0] = Fe;
+                yk = Fe;
                 
+                vctFixedSizeMatrix<double,2,1> K;
+                vctFixedSizeMatrix<double,1,1> tempK;
+                vctFixedSizeMatrix<double,1,1> invtempK;
 
-                vctFixedSizeMatrix<double,2,2> K;
-                vctFixedSizeMatrix<double,2,2> tempK;
-                vctFixedSizeMatrix<double,2,2> invtempK;
+                tempK = Hk.Transpose()*p*Hk + Rk;
 
-                tempK = Hk.Transpose()*P*Hk + Rk;
+                //Inverse(tempK,invtempK);
+                //K = p*Hk*invtempK;
+                invtempK[0][0] = 1/tempK[0][0];
+                K = p*Hk*invtempK;
 
-                Inverse(tempK,invtempK);
-                K = P*Hk*invtempK;
+                xnew = xnew + K*(yk - Hk.Transpose()*xnew);
 
-                x = x + K*(yk - Hk.Transpose()*x);
-
-                P = (vct2x2::Eye() - K*Hk.Transpose())*P;
+                Cov = (vct2x2::Eye() - K*Hk.Transpose())*p;
                 
-                Fest = x[0]*Fn + x[1];
+                double CovforbeniusNorm;
                 
+                //calculate frobenius norm of Cov
+                CovforbeniusNorm = sqrt(Cov[0][0]*Cov[0][0]+ Cov[1][0]*Cov[1][0]+ Cov[0][1]*Cov[0][1]+ Cov[1][1]*Cov[1][1]);
+          
+                        
+                    std::cout<< Cov << std::endl;
+                    std::cout<< "froben: "<< CovforbeniusNorm <<std::endl;                
+                   //to prevent P of becoming too small due to large estimation error (singularities, etc) and the estimator becomes unresponsive
+                if(CovforbeniusNorm < 0.0001){Cov = vct2x2::Eye();}
+
+                //P = (vct2x2::Eye() - K*Hk.Transpose())*P;
+                
+                Fnew = xnew[0]*Fn + xnew[1];
+             
+                //xlast = xnew;
+                //Flast = Fnew;
+
+               }
+
+
+        // Evaluate the estimator comparing the outcome of three different cases
+        // 1. sliding and cutting (simulataneously estimating mu and Fc)
+        // 2. sliding without cutting (Fc = 0)
+        bool EvaluateWithComparison( const double &Fn, const double &Fe ){
+
+                vctFixedSizeVector<double,2> x1(xlast);
+                vctFixedSizeVector<double,2> x2(xlast);
+
+                double F1 = FestLast;
+                double F2 = FestLast;
+
+                vctFixedSizeMatrix<double,2,2> Cov1(Plast);
+                vctFixedSizeMatrix<double,2,2> Cov2(Plast);
+
+                // evaluate the first scenerio
+                Evaluate(Fn, Fe, Plast, x1, F1, Cov1,true);
+                // evaluate the second scenerio
+                Evaluate(Fn, Fe, Plast, x2, F2, Cov2, false);
+                
+                double Fdiff[2] = {std::abs(F1-Fe), std::abs(F2-Fe)};
+
+                // finding the case that best resembles the measured tangential force
+                int minIndex = 0;
+                double minTemp = 100;
+                for(int j = 0; j < 2; ++j){
+
+                    if(Fdiff[j] < minTemp){
+                        minIndex = j;
+                        minTemp = Fdiff[j];
+                    }
+                }
+                
+                // find the most suitable scenerio and update member variables
+                if(minIndex == 0){
+                    x = x1;
+                    Fest = F1;
+                    P = Cov1;
+                }
+                if(minIndex == 1){
+                    x = x2;
+                    Fest = F2;
+                    P = Cov2;
+                }
+
+               
                 xlast = x;
                 FestLast = Fest;
+                Plast = P;
 
-                if(fabs(Fest - Fe) > threshold){
-                
-                        return true;
-                }
-                else{
+              if(fabs(Fest - Fe) > cuttingFailureThreshold){
 
-                        return false;
-                }
-         }
+                return true;
+            }
+            else{
+
+                return false;
+            }
+
+
+        }
+
 
        /** parameters: 
         *
@@ -117,14 +281,23 @@ class RLSestimator{
                     const bool& wamNotMoving,
                     const std::string motionDetection = "OFF"){
 
+        // detect is cutter is in contact
+        //inContact(Fn);// Tested and works
+        // detects if wam is motionDetection
+        WAMnotMoving(wamNotMoving);
+        //isSlidingWithoutCutting(x[1], wamNotMoving, currtime);
+
         if (motionDetection == "OFF"){
-            
-            if(this->Evaluate( Fn, Fe ) && !failstate){
-                   std::cout<<"Cutting Failure at time:"<< currtime <<std::endl;
+
+                   if((this->EvaluateWithComparison( Fn, Fe ) || Fe > 15) && !failstate){
+                   //std::cout<<"Cutting Failure at time:"<< currtime <<std::endl;
                    failstate = true;
-                   haveFailed = 70;
+                   haveFailed = 10;
+                   //to prevent of P becoming too small due to large estimation error (singularities, etc) and the estimator becomes unresponsive
+                   P = vct2x2::Eye();
                 }
                 else{
+                    failstate = false;
                     haveFailed = 0;
                 }
 
@@ -133,7 +306,7 @@ class RLSestimator{
         if (motionDetection == "ON"){
 
                 
-            if(wamNotMoving){
+            if(wamNotMoving || !inContact(Fn)){
 
                 x.Assign((double)0,0);
                 Fest = 0;
@@ -142,12 +315,14 @@ class RLSestimator{
       
                }
               else{
-                if(this->Evaluate( Fn, Fe ) && !failstate){
-                   std::cout<<"Cutting Failure at time:"<< currtime <<std::endl;
+                if((this->EvaluateWithComparison( Fn, Fe ) || Fe > 15) && !failstate){
+                   //std::cout<<"Cutting Failure at time:"<< currtime <<std::endl;
                    failstate = true;
-                   haveFailed = 70;
+                   haveFailed = 10;
+                   P = vct2x2::Eye();
                 }
                 else{
+                    failstate = false;
                     haveFailed = 0;
                 }
 
@@ -173,6 +348,7 @@ class RLSestimator{
 
 
         }
+
 };
 
 

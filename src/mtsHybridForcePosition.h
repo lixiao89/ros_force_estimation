@@ -117,9 +117,9 @@ private:
 
   // Slave side
   //! Read the joint positions
-  mtsFunctionRead  GetPosition;
+  mtsFunctionRead  mtsGetPosition;
   //! Write the joint torques
-  mtsFunctionWrite SetPosition;
+  mtsFunctionWrite mtsSetPosition;
 
 
   // Master side 
@@ -158,6 +158,24 @@ private:
 			   osaHybridForcePosition* hfp );
  
   // --------------------- For RLS -----------------------------------
+ 
+//! Get the position command increment from the master
+  bool GetCommand( vctFrm4x4& Rtwts );
+
+  //! Get the wrench command from the master
+  bool GetCommand( osaJR3ForceSensor::Wrench& ws );
+
+  //! Get the measured joint angles
+  bool GetPosition( vctVec& q );
+
+  //! Get the measured cartesian position
+  bool GetPosition( vctFrm4x4& Rtwt );
+
+  //! Get the measured wrench
+  bool GetWrench( osaJR3ForceSensor::Wrench& w );
+
+
+
   void PrintTime(){
       std::cout<< "current time is: "<< osaGetTime() - startTime <<std::endl;
   }
@@ -200,6 +218,8 @@ void CalcAverageVelocity(vctDynamicVector<double>& currJointPos, double& currTim
         double timediff = (timeStamps.at(avgNum-1) - timeStamps.at(0));
         avgVel = jointPosdiff / timediff;
 
+       // std::cout<< avgVel <<std::endl;
+
 }
 
 bool WAMIsNotMoving( vctDynamicVector<double>& currJointPos, double& currTime){
@@ -208,7 +228,7 @@ bool WAMIsNotMoving( vctDynamicVector<double>& currJointPos, double& currTime){
     CalcAverageVelocity(currJointPos, currTime, jointAvgVel);
       
 
-            double motionThreshold = 0.028;
+            double motionThreshold = 0.0018;
 
         if(jointAvgVel[0] < motionThreshold && jointAvgVel[1] < motionThreshold && jointAvgVel[2] < motionThreshold && jointAvgVel[3] < motionThreshold && jointAvgVel[4] < motionThreshold && jointAvgVel[5] < motionThreshold && jointAvgVel[6] < motionThreshold){
 

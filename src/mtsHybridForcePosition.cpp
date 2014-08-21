@@ -75,12 +75,13 @@ mtsHybridForcePosition::mtsHybridForcePosition
     
     state( DONOTHING ),
     enable( false ),
+//-------------- RLS -------------------
     failstate(false),
     isMoving(false),
     prevTime(osaGetTime()),
-    avgNum(4),
+    avgNum(100),
     haveFailed(0),
-
+//----------------------------------
     fz( 0.0 ),
     sg( nmrSavitzkyGolay( 1, 0, 100, 0 ) ){
 
@@ -129,8 +130,8 @@ mtsHybridForcePosition::mtsHybridForcePosition
 
     slave = AddInterfaceRequired( "Slave" );
     if( slave ){
-        slave->AddFunction( "GetPositionMSR", GetPosition );
-        slave->AddFunction( "SetPositionCMD", SetPosition );
+        slave->AddFunction( "GetPositionMSR", mtsGetPosition );
+        slave->AddFunction( "SetPositionCMD", mtsSetPosition );
     }
 
     
@@ -177,7 +178,7 @@ mtsHybridForcePosition::mtsHybridForcePosition
 
               // current joints
         prmPositionJointGet prmq; 
-        GetPosition( prmq );
+        mtsGetPosition( prmq );
         vctDynamicVector<double> q = prmq.Position();
 
         // current Cartesian pose
@@ -189,15 +190,10 @@ mtsHybridForcePosition::mtsHybridForcePosition
             // now get the orientation of the sensor
             vctMatrixRotation3<double> Rws( Rwt * Rts );
 
-            // Current force, compensate for sensor orientation
-            osaJR3ForceSensor::Wrench ft;
-            jr3->Read( ft, Rws, true, 3 );
-            
-            // filter the reading
-            stdft.push_back( ft );
-            if( sg.size() < stdft.size() ) { stdft.pop_front(); }
-            ft = convolve( stdft, sg );
-// ------------------------ For RLS ----------------------------------------
+            osaJR3ForceSensor::Wrench w;
+            bool valid = GetWrench( w );
+
+  // ------------------------ For RLS ----------------------------------------
 
 
         double currtime = timer - startTime;
@@ -216,8 +212,8 @@ mtsHybridForcePosition::mtsHybridForcePosition
         * wamNotMoving: is true when wam is not moving
         * motionDetection: a switch to toggle between with and without motion detection feature
         */
-   rls->RLSestimate(ft[2], 
-                ft[0], 
+   rls->RLSestimate(w[2], 
+                w[0], 
                 currtime,
                 q, 
                 rlsEstData,
@@ -228,7 +224,7 @@ mtsHybridForcePosition::mtsHybridForcePosition
 
     rls->GetEstimates(xesti, Festi);
 
-      ofsForceData<< timer - startTime << ", "<<ft[0]<<", "<<ft[2]<<", "<< xesti[0] << ", "<< xesti[1] <<", " << Festi <<std::endl;
+      ofsForceData<< timer - startTime << ", "<<w[0]<<", "<<w[2]<<", "<< xesti[0] << ", "<< xesti[1] <<", " << Festi <<std::endl;
              
 }
 
@@ -239,7 +235,7 @@ mtsHybridForcePosition::mtsHybridForcePosition
 void mtsHybridForcePosition::MoveTraj(){
 
             prmPositionJointGet prmq; 
-            GetPosition( prmq );
+            mtsGetPosition( prmq );
             qready = prmq.Position();
 
             vctFrame4x4<double> Rtwt = robot.ForwardKinematics( qready );
@@ -289,121 +285,57 @@ void mtsHybridForcePosition::MoveTraj(){
 
     void mtsHybridForcePosition::HybridControl(){
         
-        // current joints
-        prmPositionJointGet prmq; 
-        GetPosition( prmq );
-        vctDynamicVector<double> q = prmq.Position();
-
-        bool valid = true;
-        prmTelemetryRn.SetValid( valid );
-        prmTelemetryRn.SetPosition( q );
         
-        // current Cartesian pose
-        vctFrame4x4<double> Rtwt = robot.ForwardKinematics( q );
-        vctFrm3 tmp( vctMatrixRotation3<double>( Rtwt.Rotation() ), 
-                     Rtwt.Translation() );
-        prmTelemetrySE3.SetValid( valid );
-        prmTelemetrySE3.SetPosition( tmp );
-
-        switch( state ){
-
-        case HYBRID:
-            {
-
-                vctDynamicVector<double> qs( qsold );
-               timer = osaGetTime();
-                
-                vctFrame4x4<double> Rttt; // trajectory motion increment
-           //if( traj != NULL && IsEnabled() ){
-           if( traj != NULL ){
-                vctFrame4x4<double> Rtwt;
-                vctFixedSizeVector<double,6> vw( 0.0 ), vdwd( 0.0 );
-                // Rtwt is the interpolated new position, vw, vdwd interpolated velocity and acceleration respectively
-                traj->Evaluate( osaGetTime()-timer, Rtwt, vw, vdwd );
-                vctFrame4x4<double> Rttw( Rtwtsoldtrj );
-                Rttw.InverseSelf();
-                Rttt = Rttw * Rtwt;
-                Rtwtsoldtrj = Rtwt;
-            }
-
-    
-            // this is the desired position of the slave
-           // vctFrame4x4<double> Rtwts = Rtwtsold * Rttt;
-            vctFrame4x4<double>  Rtwts = Rtwtsold * Rttt;
-
-            // extract the rotation of the tool
-            vctMatrixRotation3<double> Rwt( Rtwt.Rotation() );
-            
-            // now get the orientation of the sensor
-            vctMatrixRotation3<double> Rws( Rwt * Rts );
-
-            // Current force, compensate for sensor orientation
-            osaJR3ForceSensor::Wrench ft;
-            jr3->Read( ft, Rws, true, 3 );
-            
-            // filter the reading
-            stdft.push_back( ft );
-            if( sg.size() < stdft.size() ) { stdft.pop_front(); }
-            ft = convolve( stdft, sg );
-            
-            // desired force
-            vctDynamicVector<double> fts( 6, 0.0 );
-           // fts[2] = fz;
-            fts[2] = -7; // CHANGE THIS to the right value !
-
-            // if non zero desired force along Z
-            if( 0 < fabs( fts[2] ) ){
-                osaHybridForcePosition::Mask 
-                    mask( osaHybridForcePosition::POSITION );
-                mask[2] = osaHybridForcePosition::FORCE; // Force along Z
-                hfp->SetMask( mask );
-            }
-            
-            // otherwise all position
-            else{
-                osaHybridForcePosition::Mask 
-                    mask( osaHybridForcePosition::POSITION );
-                hfp->SetMask( mask );
-            }
-
-            // evaluate the HFP
-            // Rtwtsold is now updated to the new position of the slave
-            if( hfp != NULL ){ hfp->Evaluate(qs, qsold, ft, fts, Rtwtsold, Rtwts); }
-            else{ 
-                CMN_LOG_RUN_ERROR << "No controller" << std::endl;
-                exit(-1);
-            }
-            
-            bool valid=true;
-            prmq.SetValid( valid );
-            prmq.Position() = qs;
-
-            SetPosition( prmq );
-            qsold = qs;
-
-           // validse3 = false;
-           // prmCommandSE3.SetValid( validse3 ); // desired position
-            
-        }
-        break;
-
-    default:
-        {
-            if( IsEnabled() && traj == NULL ){
-                bool valid=true;
-                prmq.SetValid( valid );
-                prmq.Position() = qsold;
-                SetPosition( prmq );
-            }
-            else{
-                bool valid=false;
-                prmq.SetValid( valid );
-                prmq.Position() = qsold;
-                SetPosition( prmq );
-            }
-        }
-        break;
-
     }
     
+bool mtsHybridForcePosition::GetPosition( vctVec& q ){
+
+    // read the joint positions
+    prmPositionJointGet prmq; 
+    mtsGetPosition( prmq );
+    q = prmq.Position();
+    
+    bool valid=false;
+    prmq.GetValid( valid );
+
+    return valid;
+    
 }
+
+  bool mtsHybridForcePosition::GetPosition( vctFrm4x4& Rtwt ){
+
+    // current joints
+    vctVec q;
+    bool valid = GetPosition( q );
+    
+    // current Cartesian pose
+    Rtwt = robot.ForwardKinematics( q );
+    
+    return valid;
+
+}
+
+  bool mtsHybridForcePosition::GetWrench( osaJR3ForceSensor::Wrench& w ){
+    
+    vctFrm4x4 Rtwt;
+    bool valid = GetPosition( Rtwt );
+    
+    // current orientation of the tool
+    vctRot3 Rwt( Rtwt.Rotation() );
+    // orientation of the sensor
+    vctRot3 Rws( Rwt * Rts );
+    jr3->Read( w, Rws, true, 3 );
+
+    // filter the reading
+    stdft.push_back( w );
+    if( sg.size() < stdft.size() ) { stdft.pop_front(); }
+    w = convolve( stdft, sg );
+    /*
+    if( 10 < fabs( w[2] ) )
+        { std::cout << w[2] << std::endl; }
+    */
+    return valid;
+    
+}
+
+

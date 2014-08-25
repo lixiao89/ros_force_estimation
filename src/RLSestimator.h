@@ -180,8 +180,8 @@ class RLSestimator{
                 CovforbeniusNorm = sqrt(Cov[0][0]*Cov[0][0]+ Cov[1][0]*Cov[1][0]+ Cov[0][1]*Cov[0][1]+ Cov[1][1]*Cov[1][1]);
           
                         
-                    std::cout<< Cov << std::endl;
-                    std::cout<< "froben: "<< CovforbeniusNorm <<std::endl;                
+                    //std::cout<< Cov << std::endl;
+                    //std::cout<< "froben: "<< CovforbeniusNorm <<std::endl;                
                    //to prevent P of becoming too small due to large estimation error (singularities, etc) and the estimator becomes unresponsive
                 if(CovforbeniusNorm < 0.0001){Cov = vct2x2::Eye();}
 
@@ -311,6 +311,7 @@ class RLSestimator{
                 x.Assign((double)0,0);
                 Fest = 0;
                 haveFailed = 0;
+                xlast[1] = 0;
                 rlsEstData.Assign((double)Fe, Fn, x[0], x[1], Fest, haveFailed);
       
                }

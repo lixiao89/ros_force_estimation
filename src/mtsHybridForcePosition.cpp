@@ -111,6 +111,10 @@ mtsHybridForcePosition::mtsHybridForcePosition
         this->StateTable.AddData(rlsEstData,"rlsEstData");
         rlsProvided->AddCommandReadState(this->StateTable, rlsEstData, "GetRLSestimates");
     }
+
+    // for offline data processing
+    //offlineDataIn.open("inputFileName.txt");//change this name as needed
+    //offlineDataOut.open("outputFileName.txt"); // change this as needed
 //-------------------------------------------------------
     robot.Attach( &tool );
     
@@ -125,7 +129,7 @@ mtsHybridForcePosition::mtsHybridForcePosition
                                       "ToIdle");
         control->AddEventHandlerVoid( &mtsHybridForcePosition::PrintTime, this, "PrintTime");
        }
-
+        control->AddEventHandlerVoid( &mtsHybridForcePosition::ToProcessData, this, "ToProcessData");
 
 
     slave = AddInterfaceRequired( "Slave" );
@@ -168,7 +172,9 @@ mtsHybridForcePosition::mtsHybridForcePosition
 
         if( state == MOVE )    { MoveTraj();      }
         else if(state == IDLE) { Idle();          }
-        else                   { HybridControl(); }
+        else if(state == PROCESSDATA)  { ProcessTeleopData(); }
+        else{}
+        //else                   { HybridControl(); }
 
     }
 
@@ -228,8 +234,15 @@ mtsHybridForcePosition::mtsHybridForcePosition
              
 }
 
-//----------------------------------------------------------------------------
-    
+//----------------------  For RLS Process Data Offline---------------------------------------
+ void mtsHybridForcePosition::ProcessTeleopData(){
+
+     
+ }   
+
+
+
+
 
    
 void mtsHybridForcePosition::MoveTraj(){

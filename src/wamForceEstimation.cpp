@@ -53,6 +53,7 @@ int main(int argc, char** argv){
     kb.AddKeyVoidEvent( 'i', "Control", "ToIdle" );
     kb.AddKeyVoidEvent( 'm', "Control", "Move" );
     kb.AddKeyVoidEvent( 't', "Control", "PrintTime");
+    kb.AddKeyVoidEvent( 'p', "Control", "ProcessTeleopData");
     kb.AddKeyVoidEvent( 'm', "GC", "MovePID");
     kb.AddKeyVoidEvent( 'G', "GC", "GravityCompensation");
    

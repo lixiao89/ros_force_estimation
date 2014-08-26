@@ -72,6 +72,8 @@ private:
   //--------------- For RLS --------------------
   RLSestimator* rls;
   std::ofstream ofsForceData;
+  std::ofstream offlineDataOut;
+  std::ifstream offlineDataIn;
   double startTime;
   bool failstate;
   bool isMoving;
@@ -105,7 +107,7 @@ private:
   vctDynamicVector<double> qsold;
   vctDynamicVector<double> tauold;
 
-  enum State{ DONOTHING, IDLE, RESET, ENABLE, HYBRID, MOVE};
+  enum State{ DONOTHING, IDLE, RESET, ENABLE, HYBRID, MOVE, PROCESSDATA};
   State state;
   bool enable;
 
@@ -131,6 +133,7 @@ private:
   void MoveToReady();
   void Idle(); 
   void MoveTraj();
+  void ProcessTeleopData();
   vctDynamicVector<double> sg;
   std::list< osaJR3ForceSensor::Wrench > stdft;  
 
@@ -142,6 +145,7 @@ private:
   void Move(){state = MOVE;};
   void ToIdle(){state = IDLE; std::cout<< "start Idle!"<<std::endl;};
   bool IsEnabled(){ return enable; }
+  void ToProcessData(){state = PROCESSDATA;};
 
  public:
   
